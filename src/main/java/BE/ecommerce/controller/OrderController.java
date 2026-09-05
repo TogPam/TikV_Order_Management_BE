@@ -1,11 +1,11 @@
 package BE.ecommerce.controller;
 
 import BE.ecommerce.service.OrderService;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -31,10 +31,15 @@ public class OrderController {
         }
     }
 
-    @GetMapping("/{orderId}")
-    public ResponseEntity<String> getOrder(@PathVariable String orderId) {
-        Optional<String> orderJson = orderService.getOrder(orderId);
-        return orderJson.map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.status(404).body("Order not found"));
+    // Trả về trực tiếp Content-Type là JSON
+    @GetMapping(value = "/{orderId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Object> getOrder(@PathVariable String orderId) {
+        String orderJson = orderService.getOrder(orderId);
+        
+        if (orderJson != null) {
+            // Trả về thẳng chuỗi JSON (Spring Boot sẽ tự động parse thành object JSON chuẩn trên Postman)
+            return ResponseEntity.ok(orderJson);
+        }
+        return ResponseEntity.status(404).body("{\"error\": \"Order not found\"}");
     }
 }

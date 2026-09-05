@@ -1,68 +1,58 @@
 package BE.ecommerce.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.tikv.common.TiSession;
 import org.tikv.raw.RawKVClient;
 import org.tikv.shade.com.google.protobuf.ByteString;
 
-import java.util.Optional;
+import java.util.HashMap;
+import java.util.Map;
 
 @Service
 public class OrderService {
 
     private final TiSession tiSession;
+    private final ObjectMapper objectMapper;
 
     public OrderService(TiSession tiSession) {
         this.tiSession = tiSession;
+        this.objectMapper = new ObjectMapper();
     }
 
-    // Tạo đơn hàng mới
     public void createOrder(String orderId, String customerName, double amount) throws Exception {
-        // Tạo RawKVClient từ TiSession
         try (RawKVClient client = tiSession.createRawClient()) {
             String keyStr = "order:" + orderId;
             
-                long createdAt = System.currentTimeMillis();
-                String json = "{"
-                    + "\"orderId\":\"" + escapeJson(orderId) + "\","
-                    + "\"customerName\":\"" + escapeJson(customerName) + "\","
-                    + "\"amount\":" + amount + ","
-                    + "\"status\":\"PENDING\","
-                    + "\"createdAt\":" + createdAt
-                    + "}";
+            Map<String, Object> orderData = new HashMap<>();
+            orderData.put("orderId", orderId);
+            orderData.put("customerName", customerName);
+            orderData.put("amount", amount);
+            orderData.put("status", "PENDING");
+            orderData.put("createdAt", System.currentTimeMillis());
 
-            // Chuyển đổi Key và Value sang ByteString của TiKV
             ByteString key = ByteString.copyFromUtf8(keyStr);
-            ByteString value = ByteString.copyFromUtf8(json);
+            ByteString value = ByteString.copyFromUtf8(objectMapper.writeValueAsString(orderData));
 
-            // Thực hiện ghi dữ liệu xuống node TiKV
             client.put(key, value);
         }
     }
 
-    // Truy vấn đơn hàng
-    public Optional<String> getOrder(String orderId) {
-        try (RawKVClient client = tiSession.createRawClient()) {
-            ByteString key = ByteString.copyFromUtf8("order:" + orderId);
-            
-            // Đọc dữ liệu từ TiKV
-            Optional<ByteString> value = client.get(key);
+    // Trả về trực tiếp String JSON hoặc null, không dùng Optional bọc ngoài
+    public String getOrder(String orderId) {
+    try (RawKVClient client = tiSession.createRawClient()) {
+        ByteString key = ByteString.copyFromUtf8("order:" + orderId);
+        
+        // client.get() trả về Optional<ByteString>, ta dùng .orElse(null) để bóc tách
+        ByteString value = client.get(key).orElse(null);
 
-            if (value != null && !value.isEmpty()) {
-                return Optional.of(value.toString());
-            }
-            return Optional.empty();
+        if (value != null && !value.isEmpty()) {
+            return value.toStringUtf8();
         }
-    }
-
-    private String escapeJson(String value) {
-        if (value == null) {
-            return "";
+        return null;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
         }
-        return value.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
     }
 }
